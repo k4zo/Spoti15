@@ -1,18 +1,16 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 using System.Drawing;
-using SpotifyAPI.Local;
-using SpotifyAPI.Local.Enums;
-using SpotifyAPI.Local.Models;
+using System.Threading.Tasks;
+using SpotifyAPI.Web;
+using SpotifyAPI.Web.Auth;
+using SpotifyAPI.Web.Enums;
+using SpotifyAPI.Web.Models;
 
 namespace Spoti15
 {
     class Spoti15
     {
-        private SpotifyLocalAPI api;
         private Exception initExcpt;
 
         private LogiLcd lcd;
@@ -20,11 +18,20 @@ namespace Spoti15
         private Timer spotTimer;
         private Timer lcdTimer;
         private Timer refreshTimer;
+        private Timer descFlipTimer;
 
         private uint scrollStep = 0;
+        private bool descFlip = false;
 
         private bool showAlbum = true;
         private bool showAnimatedLines = true;
+        private AuthorizationCodeAuth auth;
+        private SpotifyWebAPI api;
+
+        private string _clientId = ""; //"";
+        private string _secretId = ""; //"";
+        private string refreshToken = "";
+        private bool authorized = true;
 
         public Spoti15()
         {
@@ -32,7 +39,7 @@ namespace Spoti15
 
             InitSpot();
 
-            lcd = new LogiLcd("Spoti15");
+            lcd = new LogiLcd("Spotify");
 
             spotTimer = new Timer();
             spotTimer.Interval = 1000;
@@ -49,8 +56,18 @@ namespace Spoti15
             refreshTimer.Enabled = true;
             refreshTimer.Tick += OnRefreshTimer;
 
+            descFlipTimer = new Timer();
+            descFlipTimer.Interval = 2000;
+            descFlipTimer.Enabled = true;
+            descFlipTimer.Tick += OnDescFlip;
+
             UpdateSpot();
             UpdateLcd();
+        }
+
+        private void OnDescFlip(object source, EventArgs e)
+        {
+            descFlip = !descFlip;
         }
 
         private void OnSpotTimer(object source, EventArgs e)
@@ -63,15 +80,17 @@ namespace Spoti15
         private bool btn3Before = false;
         private void OnLcdTimer(object source, EventArgs e)
         {
+            /*
             bool btn0Now = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono0);
             if (btn0Now && !btn0Before)
                 InitSpot();
             btn0Before = btn0Now;
-
+            */
             UpdateLcd();
             scrollStep += 1;
 
             // toggle between "ARTIST - ALBUM" and "ALBUM" on line 1
+            /*
             bool btn3Now = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono3);
             if (btn3Now && !btn3Before)
                 showAlbum = !showAlbum;
@@ -82,11 +101,12 @@ namespace Spoti15
             if (btn2Now && !btn2Before)
                 showAnimatedLines = !showAnimatedLines;
             btn2Before = btn2Now;
+            */
         }
 
         private void OnRefreshTimer(object source, EventArgs e)
         {
-            InitSpot();
+            //InitSpot();
         }
 
         public void Dispose()
@@ -106,17 +126,87 @@ namespace Spoti15
             refreshTimer = null;
 
             initExcpt = null;
+            auth.Stop(0);
+        }
+
+        private void UpdateAccessToken(Token token)
+        {
+            api = new SpotifyWebAPI
+            {
+                AccessToken = token.AccessToken,
+                TokenType = token.TokenType
+            };
+            authorized = true;
+            refreshToken = token.RefreshToken;
+            Environment.SetEnvironmentVariable("SPOTIFY_REFRESH_TOKEN", refreshToken);
+        }
+
+        private async void OnAuthReceived(object sender, AuthorizationCode payload)
+        {
+            try
+            {
+                auth.Stop();
+
+                var token = await auth.ExchangeCode(payload.Code);
+                UpdateAccessToken(token);
+            }
+            catch (Exception e)
+            {
+                initExcpt = e;
+            }
+
+
+        }
+
+        private void Authorize()
+        {
+            var url = "http://localhost:4002";
+
+            System.Diagnostics.Debug.Write("Re-authorize\r\n");
+            auth?.Stop();
+            auth = new AuthorizationCodeAuth(_clientId, _secretId, url, url, Scope.UserReadCurrentlyPlaying | Scope.UserReadPlaybackState);
+
+            if (string.IsNullOrEmpty(refreshToken))
+            {
+                auth.Start();
+                auth.AuthReceived += OnAuthReceived;
+                auth.OpenBrowser();
+            }
+            else
+            {
+                RefreshAccessToken();
+            }
+        }
+
+        private async Task RefreshAccessToken()
+        {
+            try
+            {
+                var token = await auth.RefreshToken(refreshToken);
+                if(token.HasError())
+                {
+                    refreshToken = null;
+                    System.Diagnostics.Debug.Write("Bad token\r\n");
+                    Authorize();
+                    return;
+                }
+            }
+            catch(Exception e)
+            {
+                initExcpt = e;
+            }
         }
 
         private void InitSpot()
         {
             try
             {
-                if (api == null)
-                    api = new SpotifyLocalAPI();
-                if (!api.Connect())
-                    throw new Exception ("Is Spotify Even Running?");
-                initExcpt = null;
+                _clientId = string.IsNullOrEmpty(_clientId) ? Environment.GetEnvironmentVariable("SPOTIFY_CLIENT_ID") : _clientId;
+                _secretId = string.IsNullOrEmpty(_secretId) ? Environment.GetEnvironmentVariable("SPOTIFY_SECRET_ID") : _secretId;
+                refreshToken = string.IsNullOrEmpty(refreshToken) ? Environment.GetEnvironmentVariable("SPOTIFY_REFRESH_TOKEN") : refreshToken;
+
+                System.Diagnostics.Debug.Write("InitSpot()\r\n");
+                Authorize();
             }
             catch (Exception e)
             {
@@ -132,7 +222,7 @@ namespace Spoti15
         }
 
         private Bitmap bgBitmap = new Bitmap(LogiLcd.MonoWidth, LogiLcd.MonoHeight);
-        private Font mainFont = new Font(Program.GetFontFamily("11pxbus"), 11, GraphicsUnit.Pixel);
+        private Font mainFont = new Font(Program.GetFontFamily("5pxbus"), 9, GraphicsUnit.Pixel);
         private Color bgColor = Color.Black;
         private Color fgColor = Color.White;
         private Brush bgBrush = Brushes.Black;
@@ -232,41 +322,76 @@ namespace Spoti15
 
                 try
                 {
-                    StatusResponse status = api.GetStatus();
-                    int len = status.Track.Length;
-                    int pos = (int)status.PlayingPosition;
-                    double perc = status.PlayingPosition / status.Track.Length;
+                    var playback = api.GetPlayback();
+                    int len = playback.Item.DurationMs;
+                    int pos = playback.ProgressMs;
+                    double perc = pos / (double)len;
 
-                    String lineZero = status.Track.ArtistResource.Name;
-                    if (showAlbum)
-                        lineZero += " - " + status.Track.AlbumResource.Name;
-                    DrawTextScroll(g, 0, lineZero);
-                    DrawTextScroll(g, 1, status.Track.TrackResource.Name);
-                    DrawTextScroll(g, 3, String.Format("{0}:{1:D2} / {2}:{3:D2}", pos / 60, pos % 60, len / 60, len % 60));
-
-                    // draw progress bar
-                    g.DrawRectangle(Pens.White, 3, 24, LogiLcd.MonoWidth - 6, 4);
-                    g.FillRectangle(Brushes.White, 3, 24, (int)((LogiLcd.MonoWidth - 6) * perc), 4);
-
-                    // draw stylistic pattern lines within progress bar
-                    if (showAnimatedLines)
+                    String lineZero = "";
+                    var artists = playback.Item.Artists.ToArray();
+                    for(int i = 0; i < artists.Length; i++)
                     {
+                        lineZero = string.Concat(lineZero, artists[i].Name);
+                        if(i != artists.Length - 1)
+                        {
+                            lineZero = string.Concat(lineZero, ", ");
+                        }
+                    }
+                    DrawTextScroll(g, 0, lineZero);
+                    DrawTextScroll(g, 1, playback.Item.Name);
+                    DrawText(g, 2, String.Format("{0}:{1:D2} / {2}:{3:D2}", pos / 60000, (pos % 60000) / 1000, len / 60000, (len % 60000) / 1000),
+                        LogiLcd.MonoWidth - 50);
+                    //DrawTextScroll(g, 2, String.Format("{0}:{1:D2} / {2}:{3:D2}", pos / 60000, (pos % 60000) / 1000, len / 60000, (len % 60000) / 1000));
+
+                    // Draw progress bar
+                    g.DrawRectangle(Pens.White, 3, 23, (LogiLcd.MonoWidth - 75), 4);
+                    g.FillRectangle(Brushes.White, 3, 23, (int)((LogiLcd.MonoWidth - 75) * perc), 4);
+
+                    if (playback.IsPlaying)
+                    {
+                        g.FillPolygon(Brushes.White, new Point[] { new Point((LogiLcd.MonoWidth - 69), 30), new Point((LogiLcd.MonoWidth - 69), 20), new Point((LogiLcd.MonoWidth - 64), 25) });
+
                         if (lineTrack > 8)
                             lineTrack = 4;
                         else
                             lineTrack++;
-                        for (int x = lineTrack; x < LogiLcd.MonoWidth - 6; x += 6)
-                            g.DrawLine(Pens.Black, new Point(x, 26), new Point(x + 2, 26));
-                    }
-                    
-                    if (status.Playing)
-                    {
-                        g.FillPolygon(Brushes.White, new Point[] { new Point(3, 42), new Point(3, 32), new Point(8, 37) });
+                        for (int x = lineTrack; x < LogiLcd.MonoWidth - 80; x += 6)
+                            g.DrawLine(Pens.Black, new Point(x, 25), new Point(x + 2, 25));
                     }
                     else
                     {
-                        g.FillRectangle(Brushes.White, new Rectangle(3, 34, 2, 7));
-                        g.FillRectangle(Brushes.White, new Rectangle(6, 34, 2, 7));
+                        g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 69), 22, 2, 7));
+                        g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 66), 22, 2, 7));
+                    }
+
+                    if (playback.Context.Type == "album")
+                    {
+                        if(descFlip)
+                        {
+                            DrawText(g, 3, "Album");
+                        }
+                        else
+                        {
+                            DrawText(g, 3, playback.Item.Album.Name);
+                        }
+                    }
+                    else if (playback.Context.Type == "playlist")
+                    {
+                        var split = playback.Context.ExternalUrls["spotify"].Split('/');
+                        var playlist = api.GetPlaylist(split[4]);
+
+                        if(descFlip)
+                        {
+                            DrawText(g, 3, "Playlist");
+                        }
+                        else
+                        {
+                            DrawText(g, 3, playlist.Name);
+                        }
+                    }
+                    else
+                    {
+                        DrawText(g, 3, "Unknown");
                     }
                 }
                 catch (NullReferenceException)
