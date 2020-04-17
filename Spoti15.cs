@@ -22,7 +22,7 @@ namespace Spoti15
         private Timer descFlipTimer;
         private Timer inputTimer;
         private Timer disableLikedSongNotificationTimer;
-        private Timer upNextTimer;
+        private Timer hideErrorTimer;
 
         private uint scrollStep = 0;
         private bool descFlip = false;
@@ -36,13 +36,18 @@ namespace Spoti15
         private string _clientId = ""; //"";
         private string _secretId = ""; //"";
         private string refreshToken = "";
-        private bool authorized = true;
+        private bool authorized = false;
         private bool cachedLikedTrack = false;
         private bool likedSongNotification = false;
         private bool unlikedSongNotification = false;
+        private bool showingError = false;
+        private string errorString = "";
         private FullTrack likedOrUnlikedSong;
-        private PlaylistTrack upNextTrack;
+        private PlaylistTrack upNextPlaylistTrack;
+        private SimpleTrack upNextAlbumTrack;
+        private FullTrack upNextAlbumTrackFull;
         private FullPlaylist cachedPlaylist;
+        private FullAlbum cachedAlbum;
         private PlaybackContext cachedPlayback;
 
         public Spoti15()
@@ -54,7 +59,7 @@ namespace Spoti15
             lcd = new LogiLcd("Spotify");
 
             spotTimer = new Timer();
-            spotTimer.Interval = 1000;
+            spotTimer.Interval = 500;
             spotTimer.Enabled = true;
             spotTimer.Tick += OnSpotTimer;
 
@@ -64,7 +69,7 @@ namespace Spoti15
             lcdTimer.Tick += OnLcdTimer;
 
             refreshTimer = new Timer();
-            refreshTimer.Interval = 5000;
+            refreshTimer.Interval = 500;
             refreshTimer.Enabled = true;
             refreshTimer.Tick += OnRefreshTimer;
 
@@ -96,9 +101,119 @@ namespace Spoti15
         private bool btn1Before = false;
         private bool btn2Before = false;
         private bool btn3Before = false;
+        private bool seeking = false;
+        private bool inControlMenu = false;
+        private double currentSeekPosition = 0.0f;
+        private static double seekSpeed = 0.003;
 
         private void CheckInput(object source, EventArgs e)
         {
+            seeking = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono2);
+
+            inControlMenu = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono3);
+            if(inControlMenu && !seeking)
+            {
+                bool btn2InCtlNow = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono2);
+                if(btn2InCtlNow && !btn2Before)
+                {
+                    var error = api.PausePlayback();
+                    if(error.HasError())
+                    {
+                        showingError = true;
+                        errorString = error.Error.Message;
+                        hideErrorTimer = new Timer();
+                        hideErrorTimer.Enabled = true;
+                        hideErrorTimer.Interval = 3000;
+                        hideErrorTimer.Tick += OnErrorHidden;
+                    }
+                }
+                btn2Before = btn2InCtlNow;
+
+                bool btn1InCtlNow = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono1);
+                if(btn1InCtlNow && !btn1Before)
+                {
+                    var error = api.SkipPlaybackToNext();
+                    if (error.HasError())
+                    {
+                        showingError = true;
+                        errorString = error.Error.Message;
+                        hideErrorTimer = new Timer();
+                        hideErrorTimer.Enabled = true;
+                        hideErrorTimer.Interval = 3000;
+                        hideErrorTimer.Tick += OnErrorHidden;
+                    }
+                }
+                btn1Before = btn1InCtlNow;
+
+                bool btn0InCtlNow = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono0);
+                if(btn0InCtlNow && !btn0Before)
+                {
+                    var error = api.SkipPlaybackToPrevious();
+                    if (error.HasError())
+                    {
+                        showingError = true;
+                        errorString = error.Error.Message;
+                        hideErrorTimer = new Timer();
+                        hideErrorTimer.Enabled = true;
+                        hideErrorTimer.Interval = 3000;
+                        hideErrorTimer.Tick += OnErrorHidden;
+                    }
+                }
+                btn0Before = btn0InCtlNow;
+                return;
+            }
+
+            if (seeking && !btn2Before && cachedPlayback != null && cachedPlayback.CurrentlyPlayingType != TrackType.Ad)
+            {
+                // set seek position to current
+                currentSeekPosition = (double)cachedPlayback.ProgressMs / cachedPlayback.Item.DurationMs;
+            }
+
+            btn2Before = seeking;
+
+            if(seeking)
+            { 
+                bool btn0InSeekNow = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono0);
+                if(btn0InSeekNow && !btn0Before)
+                {
+                    int toMs = (int)(currentSeekPosition * cachedPlayback.Item.DurationMs);
+                    var error = api.SeekPlayback(toMs);
+                    if (error.HasError())
+                    {
+                        showingError = true;
+                        errorString = error.Error.Message;
+                        hideErrorTimer = new Timer();
+                        hideErrorTimer.Enabled = true;
+                        hideErrorTimer.Interval = 3000;
+                        hideErrorTimer.Tick += OnErrorHidden;
+                    }
+                    seeking = false;
+                    btn0Before = true;
+                    return;
+                }
+                btn0Before = btn0InSeekNow;
+
+                if(lcd.IsButtonPressed(LogiLcd.LcdButton.Mono1))
+                {
+                    currentSeekPosition -= seekSpeed;
+                }
+                if(lcd.IsButtonPressed(LogiLcd.LcdButton.Mono3))
+                {
+                    currentSeekPosition += seekSpeed;
+                }
+
+                if(currentSeekPosition > 1.0)
+                {
+                    currentSeekPosition = 1.0;
+                }
+                else if(currentSeekPosition < 0.0)
+                {
+                    currentSeekPosition = 0.0;
+                }
+
+                return;
+            }
+
             bool btn0Now = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono0);
             if(btn0Now && !btn0Before)
             {
@@ -144,69 +259,92 @@ namespace Spoti15
             bool btn1Now = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono1);
             if(btn1Now)
             {
-                var playlist = cachedPlaylist;
-                if(playlist == null)
-                {
-                    return;
-                }
-
                 var playback = cachedPlayback;
                 if(playback == null)
                 {
                     return;
                 }
 
-                /*if(showUpNext)
-                {
-                    showUpNext = false;
-                    btn1Before = btn1Now;
-                    upNextTimer.Enabled = false;
+                if(playback.CurrentlyPlayingType == TrackType.Ad)
+                {   // doing calls later down here is bad
                     return;
-                }*/
+                }
 
-                upNextTrack = null;
-                for(int i = 0; i < playlist.Tracks.Items.Capacity; i++)
+                if(playback.Context == null)
                 {
-                    if(playlist.Tracks.Items[i].Track.Uri == playback.Item.Uri)
+
+                }
+                else if(playback.Context.Type == "playlist")
+                {
+                    var playlist = cachedPlaylist;
+                    if (playlist == null)
                     {
-                        // next track is it
-                        if(i == playlist.Tracks.Items.Capacity - 1)
+                        return;
+                    }
+
+                    upNextPlaylistTrack = null;
+                    for (int i = 0; i < playlist.Tracks.Items.Count; i++)
+                    {
+                        if (playlist.Tracks.Items[i].Track.Uri == playback.Item.Uri)
                         {
-                            upNextTrack = playlist.Tracks.Items[0];
+                            // next track is it
+                            if (i == playlist.Tracks.Items.Count - 1)
+                            {
+                                upNextPlaylistTrack = playlist.Tracks.Items[0];
+                            }
+                            else
+                            {
+                                upNextPlaylistTrack = playlist.Tracks.Items[i + 1];
+                            }
+                            break;
                         }
-                        else
-                        {
-                            upNextTrack = playlist.Tracks.Items[i + 1];
-                        }
-                        break;
+                    }
+                    if (upNextPlaylistTrack == null)
+                    {
+                        return;
                     }
                 }
-                if(upNextTrack == null)
+                else if(playback.Context.Type == "album")
                 {
-                    return;
-                }
+                    upNextPlaylistTrack = null;
 
-                showUpNext = true;
-                /*upNextTimer = new Timer();
-                upNextTimer.Enabled = true;
-                upNextTimer.Interval = 5000;
-                upNextTimer.Tick += OnUpNextFinished;*/
+                    var newAlbum = cachedAlbum;
+                    if(newAlbum == null)
+                    {
+                        return;
+                    }
+
+                    for(int i = 0; i < newAlbum.Tracks.Items.Count; i++)
+                    {
+                        if(playback.Item.Uri == newAlbum.Tracks.Items[i].Uri)
+                        {
+                            if(i == newAlbum.Tracks.Items.Count - 1)
+                            {
+                                upNextAlbumTrack = null;
+                            }
+                            else
+                            {
+                                upNextAlbumTrack = newAlbum.Tracks.Items[i + 1];
+                            }
+                        }
+                    }
+                }
+                
             }
 
             showUpNext = btn1Now;
-            //btn1Before = btn1Now;
+        }
+
+        private void OnErrorHidden(object source, EventArgs e)
+        {
+            showingError = false;
+            hideErrorTimer.Enabled = false;
         }
 
         private void OnLikedSongNotificationFinished(object source, EventArgs e)
         {
             likedSongNotification = unlikedSongNotification = false;
             disableLikedSongNotificationTimer.Enabled = false;
-        }
-
-        private void OnUpNextFinished(object source, EventArgs e)
-        {
-            showUpNext = false;
-            upNextTimer.Enabled = false;
         }
         
         private void OnLcdTimer(object source, EventArgs e)
@@ -265,8 +403,6 @@ namespace Spoti15
             {
                 initExcpt = e;
             }
-
-
         }
 
         private void Authorize()
@@ -275,7 +411,8 @@ namespace Spoti15
 
             System.Diagnostics.Debug.Write("Re-authorize\r\n");
             auth?.Stop();
-            auth = new AuthorizationCodeAuth(_clientId, _secretId, url, url, Scope.UserReadCurrentlyPlaying | Scope.UserReadPlaybackState | Scope.UserLibraryRead | Scope.UserLibraryModify);
+            auth = new AuthorizationCodeAuth(_clientId, _secretId, url, url, Scope.UserReadCurrentlyPlaying | 
+                Scope.UserReadPlaybackState | Scope.UserLibraryRead | Scope.UserLibraryModify | Scope.UserModifyPlaybackState);
 
             if (string.IsNullOrEmpty(refreshToken))
             {
@@ -327,9 +464,75 @@ namespace Spoti15
 
         public void UpdateSpot()
         {
-
             if(initExcpt != null)
                 return;
+
+            if (api == null)
+                return;
+
+            var retrievedPlayback = api.GetPlayback();
+            if(retrievedPlayback != null)
+            {
+                cachedPlayback = retrievedPlayback;
+                if(cachedPlayback.HasError() && cachedPlayback.Error.Message == "The access token expired" && authorized)
+                {
+                    authorized = false;
+                    Authorize();
+                }
+            }
+
+            if(cachedPlayback != null && cachedPlayback.Item != null)
+            {
+                var ListedItem = new List<string>(1);
+                ListedItem.Add(cachedPlayback.Item.Id);
+                var response = api.CheckSavedTracks(ListedItem);
+                if(response.List == null)
+                {
+                    if (response.HasError() && response.Error.Message == "The access token expired" && authorized)
+                    {
+                        authorized = false;
+                        Authorize();
+                    }
+                }
+                else
+                {
+                    cachedLikedTrack = response.List[0];
+                }
+
+                if(cachedPlayback.Context == null)
+                {
+
+                }
+                else if(cachedPlayback.Context.Type == "playlist")
+                {
+                    var split = cachedPlayback.Context.ExternalUrls["spotify"].Split('/');
+                    var newPlaylist = api.GetPlaylist(split[4]);
+                    if(newPlaylist != null && !newPlaylist.HasError())
+                    {
+                        cachedPlaylist = newPlaylist;
+                    }
+                }
+                else if(cachedPlayback.Context.Type == "album")
+                {
+                    var newAlbum = api.GetAlbum(cachedPlayback.Item.Album.Id);
+                    if(newAlbum != null && !newAlbum.HasError())
+                    {
+                        cachedAlbum = newAlbum;
+                    }
+
+                    if(upNextAlbumTrack != null)
+                    {
+                        upNextAlbumTrackFull = api.GetTrack(cachedPlayback.Item.Id);
+                    }
+                    else
+                    {
+                        upNextAlbumTrackFull = null;
+                    }
+                }
+                
+                
+            }
+            
         }
 
         private Bitmap bgBitmap = new Bitmap(LogiLcd.MonoWidth, LogiLcd.MonoHeight);
@@ -435,6 +638,117 @@ namespace Spoti15
             return returnValue;
         }
 
+        private string GetStringFromGenres(string[] genres)
+        {
+            string returnValue = "";
+
+            for (int i = 0; i < genres.Length; i++)
+            {
+                returnValue = string.Concat(returnValue, genres[i]);
+                if (i != genres.Length - 1)
+                {
+                    returnValue = string.Concat(returnValue, ", ");
+                }
+            }
+
+            return returnValue;
+        }
+
+        private void DrawPlaybackStatus(Graphics g, bool drawTime)
+        {
+            var playback = cachedPlayback;
+
+            int len = playback.Item.DurationMs;
+            int pos = playback.ProgressMs;
+            double perc = pos / (double)len;
+
+            // Draw following status
+            DrawText(g, 6, cachedLikedTrack ? "e" : "f", iconFont, 0, 1);
+
+            // Draw progress bar
+            g.DrawRectangle(Pens.White, 8, LogiLcd.MonoHeight - 6, (LogiLcd.MonoWidth - 24), 4);
+            g.FillRectangle(Brushes.White, 8, LogiLcd.MonoHeight - 6, (int)((LogiLcd.MonoWidth - 24) * perc), 4);
+
+            if (playback.IsPlaying)
+            {
+                g.FillPolygon(Brushes.White, new Point[] {
+                            new Point((LogiLcd.MonoWidth - 14), LogiLcd.MonoHeight - 7),
+                            new Point((LogiLcd.MonoWidth - 14), LogiLcd.MonoHeight - 1),
+                            new Point((LogiLcd.MonoWidth - 9), LogiLcd.MonoHeight - 4)
+                        });
+
+                if (lineTrack > 12)
+                    lineTrack = 6;
+                else
+                    lineTrack++;
+                for (int x = lineTrack; x < LogiLcd.MonoWidth - 22; x += 8)
+                    g.DrawLine(Pens.Black, new Point(x, LogiLcd.MonoHeight - 4), new Point(x + 2, LogiLcd.MonoHeight - 4));
+            }
+            else
+            {
+                g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 10), LogiLcd.MonoHeight - 6, 2, 5));
+                g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 13), LogiLcd.MonoHeight - 6, 2, 5));
+            }
+
+            if (playback.ShuffleState)
+            {
+                DrawText(g, 6, "S", mainFont, LogiLcd.MonoWidth - 7, -1);
+            }
+            else if (playback.RepeatState == RepeatState.Context)
+            {
+                DrawText(g, 6, "h", iconFont, LogiLcd.MonoWidth - 7);
+            }
+            else if (playback.RepeatState == RepeatState.Track)
+            {
+                DrawText(g, 6, "g", iconFont, LogiLcd.MonoWidth - 7);
+            }
+
+            if(drawTime)
+            {
+                DrawTextScroll(g, 5, String.Format("{0}:{1:D2} / {2}:{3:D2}", pos / 60000, (pos % 60000) / 1000, len / 60000, (len % 60000) / 1000));
+            }
+        }
+
+        private void DrawPlaylistStatus(Graphics g)
+        {
+            var playback = cachedPlayback;
+
+            if (playback.Context == null)
+            {
+
+            }
+            else if (playback.Context.Type == "album")
+            {
+                if (descFlip)
+                {
+                    DrawText(g, 0, "Playing Album");
+                }
+                else
+                {
+                    DrawTextWithinBounds(g, 0, playback.Item.Album.Name, mainFont, 0, 110);
+                }
+            }
+            else if (playback.Context.Type == "playlist")
+            {
+                var playlist = cachedPlaylist;
+                if (playlist != null)
+                {
+                    if (descFlip)
+                    {
+                        DrawTextWithinBounds(g, 0, playlist.Type, mainFont, 0, 110);
+                    }
+                    else
+                    {
+                        DrawTextWithinBounds(g, 0, playlist.Name, mainFont, 0, 110);
+                    }
+                }
+            }
+            else
+            {
+                DrawText(g, 3, "Unknown");
+            }
+        }
+
         //private Byte[] emptyBg = new Byte[LogiLcd.MonoWidth * LogiLcd.MonoHeight];
         private int lineTrack = 4;
         public void UpdateLcd()
@@ -464,8 +778,16 @@ namespace Spoti15
                         // TODO: draw spotify logo
                         g.Clear(bgColor);
                         DrawTextScroll(g, 2, "SPOTIFY");
-                        DoRender();
-                        return;
+                    }
+                    else if(showingError)
+                    {
+                        g.Clear(bgColor);
+
+                        DrawTextScroll(g, 1, "ERROR", bigFont);
+                        DrawTextScroll(g, 3, errorString);
+
+                        DrawPlaybackStatus(g, true);
+                        DrawPlaylistStatus(g);
                     }
                     else if(likedSongNotification || unlikedSongNotification)
                     {
@@ -483,170 +805,199 @@ namespace Spoti15
                         DrawTextScroll(g, 3, likedOrUnlikedSong.Name);
                         DrawTextScroll(g, 4, GetStringFromArtists(likedOrUnlikedSong.Artists.ToArray()));
                         DrawTextScroll(g, 5, likedOrUnlikedSong.Album.Name);
-                        DoRender();
-                        return;
+
+                        DrawPlaybackStatus(g, false);
+                    }
+                    else if(seeking && cachedPlayback != null && cachedPlayback.Item != null)
+                    {
+                        g.Clear(bgColor);
+
+                        DrawTextScroll(g, 1, "SEEKING");
+
+                        var posInMs = (int)(cachedPlayback.Item.DurationMs * currentSeekPosition);
+                        DrawTextScroll(g, 3, string.Format("{0:D2}:{1:D2}", posInMs / 60000, (posInMs % 60000) / 1000));
+
+                        // Draw progress bar
+                        g.DrawRectangle(Pens.White, 8, LogiLcd.MonoHeight - 16, (LogiLcd.MonoWidth - 24), 6);
+                        g.FillRectangle(Brushes.White, 8, LogiLcd.MonoHeight - 16, (int)((LogiLcd.MonoWidth - 24) * currentSeekPosition), 6);
+
+                        g.FillPolygon(Brushes.White, new Point[] {
+                            new Point((LogiLcd.MonoWidth - 19), LogiLcd.MonoHeight - 7),
+                            new Point((LogiLcd.MonoWidth - 19), LogiLcd.MonoHeight - 1),
+                            new Point((LogiLcd.MonoWidth - 14), LogiLcd.MonoHeight - 4)
+                        });
+
+                        g.FillPolygon(Brushes.White, new Point[] {
+                            new Point(60, LogiLcd.MonoHeight - 7),
+                            new Point(60, LogiLcd.MonoHeight - 1),
+                            new Point(55, LogiLcd.MonoHeight - 4)
+                        });
+
+                        DrawText(g, 6, "OK", iconFont, 8);
+                        DrawPlaylistStatus(g);
+                    }
+                    else if(inControlMenu && cachedPlayback != null)
+                    {
+                        g.Clear(bgColor);
+
+                        g.FillPolygon(Brushes.White, new Point[] {
+                            new Point((LogiLcd.MonoWidth - 100), LogiLcd.MonoHeight - 7),
+                            new Point((LogiLcd.MonoWidth - 100), LogiLcd.MonoHeight - 1),
+                            new Point((LogiLcd.MonoWidth - 95), LogiLcd.MonoHeight - 4)
+                        });
+
+                        g.FillPolygon(Brushes.White, new Point[] {
+                            new Point((LogiLcd.MonoWidth - 106), LogiLcd.MonoHeight - 7),
+                            new Point((LogiLcd.MonoWidth - 106), LogiLcd.MonoHeight - 1),
+                            new Point((LogiLcd.MonoWidth - 101), LogiLcd.MonoHeight - 4)
+                        });
+
+                        g.FillPolygon(Brushes.White, new Point[] {
+                            new Point(17, LogiLcd.MonoHeight - 7),
+                            new Point(17, LogiLcd.MonoHeight - 1),
+                            new Point(12, LogiLcd.MonoHeight - 4)
+                        });
+
+                        g.FillPolygon(Brushes.White, new Point[] {
+                            new Point(23, LogiLcd.MonoHeight - 7),
+                            new Point(23, LogiLcd.MonoHeight - 1),
+                            new Point(18, LogiLcd.MonoHeight - 4)
+                        });
+
+                        if (cachedPlayback.IsPlaying)
+                        {
+                            g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 58), LogiLcd.MonoHeight - 6, 2, 5));
+                            g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 61), LogiLcd.MonoHeight - 6, 2, 5));
+                        }
+                        else
+                        {
+                            g.FillPolygon(Brushes.White, new Point[] {
+                                new Point((LogiLcd.MonoWidth - 64), LogiLcd.MonoHeight - 7),
+                                new Point((LogiLcd.MonoWidth - 64), LogiLcd.MonoHeight - 1),
+                                new Point((LogiLcd.MonoWidth - 59), LogiLcd.MonoHeight - 4)
+                            });
+                        }
+
+                        DrawTextScroll(g, 1, "UP NEXT", bigFont);
+
+                        if(cachedPlayback.Context == null)
+                        {
+
+                        }
+                        else if (cachedPlayback.Context.Type == "playlist" && upNextPlaylistTrack != null)
+                        {
+                            DrawTextScroll(g, 3, upNextPlaylistTrack.Track.Name);
+                            DrawTextScroll(g, 4, GetStringFromArtists(upNextPlaylistTrack.Track.Artists.ToArray()));
+                            DrawTextScroll(g, 5, upNextPlaylistTrack.Track.Album.Name);
+
+                            DrawText(g, 0, string.Format("e {0}", upNextPlaylistTrack.Track.Popularity), iconFont, 5, 5);
+                        }
+                        else if (cachedPlayback.Context.Type == "album" && upNextAlbumTrack != null)
+                        {
+                            DrawTextScroll(g, 3, upNextAlbumTrack.Name);
+                            DrawTextScroll(g, 4, string.Format("Track {0}", upNextAlbumTrack.TrackNumber));
+
+                            if (upNextAlbumTrackFull != null)
+                            {
+                                DrawText(g, 0, string.Format("e {0}", upNextAlbumTrackFull.Popularity), iconFont, 5, 5);
+                            }
+                        }
+                        else
+                        {
+                            DrawTextScroll(g, 3, "Unknown");
+                        }
                     }
                     else if(showUpNext)
                     {
                         g.Clear(bgColor);
 
-                        DrawTextScroll(g, 1, "UP NEXT", bigFont);
-                        DrawTextScroll(g, 3, upNextTrack.Track.Name);
-                        DrawTextScroll(g, 4, GetStringFromArtists(upNextTrack.Track.Artists.ToArray()));
-                        DrawTextScroll(g, 5, upNextTrack.Track.Album.Name);
-                        DoRender();
-                        return;
-                    }
-                    
-                    try
-                    {
-                        var retrievedPlayback = api.GetPlayback();
-                        if(retrievedPlayback != null && retrievedPlayback.Item != null)
+                        if(cachedPlayback.Context == null)
                         {
-                            cachedPlayback = retrievedPlayback;
+
                         }
-                    }
-                    catch(Exception)
-                    {
-
-                    }
-
-                    var playback = cachedPlayback;
-                    if(playback == null || playback.Item == null)
-                    {
-                        var track = api.GetPlayingTrack();
-                        if(track == null)
+                        else if(cachedPlayback.Context.Type == "playlist")
                         {
-                            g.Clear(bgColor);
-                            DrawTextScroll(g, 1, "ERROR");
-                            DrawTextScroll(g, 2, "SPOTIFY PLAYBACK NOT DETECTED");
-                            DoRender();
-                            return;
+                            DrawTextScroll(g, 1, "PLAYLIST", bigFont);
+                            DrawTextScroll(g, 3, cachedPlaylist.Name);
+                            DrawTextScroll(g, 4, cachedPlaylist.Description);
+
+                            DrawText(g, 0, string.Format("e {0}", cachedPlaylist.Followers.Total), iconFont, 5, 5);
+
+                            DrawPlaybackStatus(g, true);
                         }
-                        else if(track.CurrentlyPlayingType == TrackType.Ad)
+                        else if(cachedPlayback.Context.Type == "album")
                         {
-                            g.Clear(bgColor);
-                            DrawTextScroll(g, 2, "Advertisement");
-                            DoRender();
-                            return;
+                            DrawTextScroll(g, 1, "ALBUM", bigFont);
+                            DrawTextScroll(g, 3, cachedPlayback.Item.Album.Name);
+                            DrawTextScroll(g, 4, GetStringFromArtists(cachedPlayback.Item.Artists.ToArray()));
+                            DrawTextScroll(g, 5, string.Format("Released {0}", cachedPlayback.Item.Album.ReleaseDate));
+
+                            if(cachedAlbum != null)
+                            {
+                                string genres = GetStringFromGenres(cachedAlbum.Genres.ToArray());
+                                if(genres == "")
+                                {
+                                    DrawText(g, 0, string.Format("e {0}", cachedAlbum.Popularity), iconFont, 5, 5);
+                                }
+                                else
+                                {
+                                    DrawTextScroll(g, 6, string.Format("{0} - {1} followers", GetStringFromGenres(cachedAlbum.Genres.ToArray()), cachedAlbum.Popularity));
+                                }
+                            }
+
+                            DrawPlaybackStatus(g, true);
                         }
-                        else
-                        {
-                            return;
-                        }
-                    }
-                    int len = playback.Item.DurationMs;
-                    int pos = playback.ProgressMs;
-                    double perc = pos / (double)len;
-
-                    try
-                    {
-                        var ListedItem = new List<string>(1);
-                        ListedItem.Add(playback.Item.Id);
-                        var response = api.CheckSavedTracks(ListedItem);
-                        cachedLikedTrack = response.List[0];
-                    }
-                    catch(Exception)
-                    {
-
-                    }
-
-                    DrawText(g, 6, cachedLikedTrack ? "e" : "f", iconFont, 0, 1);
-
-                    DrawTextScroll(g, 2, GetStringFromArtists(playback.Item.Artists.ToArray()));
-                    DrawTextScroll(g, 1, playback.Item.Name);
-                    DrawTextScroll(g, 5, String.Format("{0}:{1:D2} / {2}:{3:D2}", pos / 60000, (pos % 60000) / 1000, len / 60000, (len % 60000) / 1000));
-                    DrawTextScroll(g, 3, playback.Item.Album.Name);
-
-                    // Draw progress bar
-                    g.DrawRectangle(Pens.White, 8, LogiLcd.MonoHeight - 6, (LogiLcd.MonoWidth - 24), 4);
-                    g.FillRectangle(Brushes.White, 8, LogiLcd.MonoHeight - 6, (int)((LogiLcd.MonoWidth - 24) * perc), 4);
-
-                    if (playback.IsPlaying)
-                    {
-                        g.FillPolygon(Brushes.White, new Point[] {
-                            new Point((LogiLcd.MonoWidth - 14), LogiLcd.MonoHeight - 7),
-                            new Point((LogiLcd.MonoWidth - 14), LogiLcd.MonoHeight - 1),
-                            new Point((LogiLcd.MonoWidth - 9), LogiLcd.MonoHeight - 4)
-                        });
-
-                        if (lineTrack > 12)
-                            lineTrack = 6;
-                        else
-                            lineTrack++;
-                        for (int x = lineTrack; x < LogiLcd.MonoWidth - 22; x += 8)
-                            g.DrawLine(Pens.Black, new Point(x, LogiLcd.MonoHeight - 4), new Point(x + 2, LogiLcd.MonoHeight - 4));
                     }
                     else
                     {
-                        g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 10), LogiLcd.MonoHeight - 6, 2, 5));
-                        g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 13), LogiLcd.MonoHeight - 6, 2, 5));
-                    }
 
-                    if(playback.ShuffleState)
-                    {
-                        DrawText(g, 6, "S", mainFont, LogiLcd.MonoWidth - 7, -1);
-                    }
-                    else if(playback.RepeatState == RepeatState.Context)
-                    {
-                        DrawText(g, 6, "h", iconFont, LogiLcd.MonoWidth - 7);
-                    }
-                    else if(playback.RepeatState == RepeatState.Track)
-                    {
-                        DrawText(g, 6, "g", iconFont, LogiLcd.MonoWidth - 7);
-                    }
-                    
-                    if (playback.Context.Type == "album")
-                    {
-                        if(descFlip)
+                        var playback = cachedPlayback;
+                        if (playback == null || playback.Item == null)
                         {
-                            DrawText(g, 0, "Playing Album");
-                        }
-                        else
-                        {
-                            DrawTextWithinBounds(g, 0, playback.Item.Album.Name, mainFont, 0, 120);
-                        }
-                    }
-                    else if (playback.Context.Type == "playlist")
-                    {
-                        try
-                        {
-                            var split = playback.Context.ExternalUrls["spotify"].Split('/');
-                            var newPlaylist = api.GetPlaylist(split[4]);
-                            if(newPlaylist != null)
+                            if (playback == null)
                             {
-                                cachedPlaylist = api.GetPlaylist(split[4]);
+                                g.Clear(bgColor);
+                                DrawTextScroll(g, 1, "ERROR");
+                                DrawTextScroll(g, 2, "SPOTIFY PLAYBACK NOT DETECTED");
+                                DoRender();
+                                return;
                             }
-                            
-                        }
-                        catch(Exception)
-                        {
-
-                        }
-
-                        var playlist = cachedPlaylist;
-                        if(!playlist.Equals(null))
-                        {
-                            if (descFlip)
+                            else if (playback.CurrentlyPlayingType == TrackType.Ad)
                             {
-                                DrawTextWithinBounds(g, 0, playlist.Type, mainFont, 0, 110);
+                                g.Clear(bgColor);
+                                DrawTextScroll(g, 2, "Advertisement");
+                                DoRender();
+                                return;
+                            }
+                            else if (playback.HasError())
+                            {
+                                g.Clear(bgColor);
+                                DrawTextScroll(g, 1, "ERROR");
+                                DrawTextScroll(g, 2, playback.Error.Message);
                             }
                             else
                             {
-                                DrawTextWithinBounds(g, 0, playlist.Name, mainFont, 0, 110);
+                                return;
                             }
                         }
-                    }
-                    else
-                    {
-                        DrawText(g, 3, "Unknown");
+                        
+
+                        // Draw number of followers
+                        DrawText(g, 5, string.Format("e {0}", cachedPlayback.Item.Popularity), iconFont);
+
+                        DrawTextScroll(g, 2, GetStringFromArtists(playback.Item.Artists.ToArray()));
+                        DrawTextScroll(g, 1, playback.Item.Name);
+                        DrawTextScroll(g, 3, playback.Item.Album.Name);
+
+                        DrawPlaybackStatus(g, true);
+                        DrawPlaylistStatus(g);
                     }
 
                     string currentTime = DateTime.Now.ToString("h:mm:ss tt");
                     Size textSize = TextRenderer.MeasureText(currentTime, mainFont);
                     DrawText(g, 0, currentTime, LogiLcd.MonoWidth - textSize.Width);
                 }
-                catch (NullReferenceException e)
+                catch (Exception e)
                 {
                     g.Clear(bgColor);
                     var split = e.StackTrace.Split('\\');
