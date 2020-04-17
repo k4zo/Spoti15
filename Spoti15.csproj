@@ -45,6 +45,7 @@
     <ErrorReport>prompt</ErrorReport>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
     <OutputPath>bin\x86\Release\</OutputPath>
@@ -118,24 +119,60 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
-    <None Include="lcdfonts\11px2bus.ttf" />
-    <None Include="lcdfonts\11px3bus.ttf" />
-    <None Include="lcdfonts\11pxbus.ttf" />
-    <None Include="lcdfonts\13pxbus.ttf" />
-    <None Include="lcdfonts\5px2bus.ttf" />
-    <None Include="lcdfonts\5pxbus.ttf" />
-    <None Include="lcdfonts\6px2bus.ttf" />
-    <None Include="lcdfonts\6pxbus.ttf" />
-    <None Include="lcdfonts\7px2bus.ttf" />
-    <None Include="lcdfonts\7px3bus.ttf" />
-    <None Include="lcdfonts\7px4bus.ttf" />
-    <None Include="lcdfonts\7pxbus.ttf" />
-    <None Include="lcdfonts\7pxkbus.ttf" />
-    <None Include="lcdfonts\8pxbus.ttf" />
-    <None Include="lcdfonts\9px2bus.ttf" />
-    <None Include="lcdfonts\9px3bus.ttf" />
-    <None Include="lcdfonts\9pxbus.ttf" />
-    <None Include="lcdfonts\icq.ttf" />
+    <Content Include="lcdfonts\11px2bus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\11px3bus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\11pxbus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\13pxbus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\5px2bus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\5pxbus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\6px2bus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\6pxbus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\7px2bus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\7px3bus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\7px4bus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\7pxbus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\7pxkbus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\8pxbus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\9px2bus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\9px3bus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\9pxbus.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="lcdfonts\icq.ttf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>

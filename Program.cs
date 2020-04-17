@@ -7,6 +7,7 @@ using System.Resources;
 using System.ServiceModel;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
+using System.IO;
 
 namespace Spoti15
 {
@@ -74,14 +75,18 @@ namespace Spoti15
                 if (resKey == null || !resKey.StartsWith("font_"))
                     continue;
 
+                var path = Path.Combine(Application.StartupPath, string.Format("lcdfonts\\{0}.ttf", resKey.Substring(5)));
+                pFonts.AddFontFile(path);
+                /*
                 byte[] resVal = (byte[])entry.Value;
-
-                IntPtr data = Marshal.AllocCoTaskMem(resVal.Length);
-                Marshal.Copy(resVal, 0, data, resVal.Length);
-
-                pFonts.AddMemoryFont(data, resVal.Length);
-
-                Marshal.FreeCoTaskMem(data);
+                unsafe
+                {
+                    fixed(byte * pFontData = resVal)
+                    {
+                        pFonts.AddMemoryFont((System.IntPtr)pFontData, resVal.Length);
+                    }
+                }
+                */
             }
         }
 
@@ -91,6 +96,7 @@ namespace Spoti15
 
         static void Main(string[] args)
         {
+            Application.SetCompatibleTextRenderingDefault(false);
             using (ChannelFactory<ISpoti15WCF> spotFactory = new ChannelFactory<ISpoti15WCF>(new NetNamedPipeBinding(), new EndpointAddress("net.pipe://localhost/Spoti15WCF")))
             {
                 try
