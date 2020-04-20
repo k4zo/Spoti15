@@ -1002,7 +1002,7 @@ namespace Spoti15
                                 }
                             }
 
-                            DrawPlaybackStatus(g, true);
+                            DrawPlaybackStatus(g, false);
                         }
                         else if(cachedPlayback.Context.Type == "artist" && cachedArtist != null)
                         {
