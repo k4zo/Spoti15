@@ -2,45 +2,75 @@
 ### A Spotify Applet for the Logitech G15/G510S
 
 ---
-![example gif](https://thumbs.gfycat.com/HalfSpanishDutchshepherddog-size_restricted.gif)
----
- The original developer has abandoned the project so I've kept this applet updated to work with the latest version of [SpotifyAPI-NET](https://github.com/JohnnyCrazy/SpotifyAPI-NET).
+ The original developer has abandoned the project so I've kept this applet updated to work with the latest version of [SpotifyAPI-NET](https://github.com/JohnnyCrazy/SpotifyAPI-NET) and updated it with new features.
  
-### Features
-1. Displays: Artist | Track Title | Album Title |  Elapsed Time | Total Time | Play/Pause Status
-1. Text scrolling
-2. Sleek 11px Native font
-3. Support for the latest version Spotify 
+## Features
+1. Three display modes
+2. Seeking and playback control (Spotify Premium members only)
+3. Follow/Unfollow buttons
+4. Text scrolling
+5. Sleek display
+6. Support for the latest version Spotify 
 
-### Installation
-1\. Download the Latest release of Spoti15 from [Here.](https://github.com/haidarn2/Spoti15/releases)
+## Installation
+1\. Download the Latest release of Spoti15 from [Here.](https://github.com/eezstreet/Spoti15/releases)
 
-2\. Ensure that Spotify is Running in the background.
+2\. Create a new applet in the Spotify Developer Dashboard. Save the Client ID and Secret ID.
 
-3\. Run Spoti15.exe!
+3\. Run Spoti15. Use the Client ID and Secret ID in the web browser window that pops up.
 
-![Running spoti15](http://i.imgur.com/hbvBbMS.png)
+4\. (OPTIONAL): Save the Client ID and Secret ID to environment variables (SPOTIFY_CLIENT_ID and SPOTIFY_SECRET_ID) to save them across sessions.
 
-4\. Done!
+5\. Ensure that the application is selected in your Logitech Gaming Software
+
+6\. Ensure that Spotify is Running in the background.
+
+7\. Done!
+
+## Main Display
+![Main display](https://i.imgur.com/359JN6p.png)
 
 
-![example gif](http://gifimgs.com/res/1016/57f883e446259953890092.gif)
+### Controls
 
-### Customization
-Currently, two things can be toggled within Spoti15; album name display, and animated lines.
+Pressing the left button (button 0) at any time will either LIKE or UNLIKE the currently playing song.
 
-![controls](http://i.imgur.com/0euaQrH.png)
+![Liked display](https://i.imgur.com/DfqLbRy.png)
 
-### Toggling Album Name ON/OFF
-![album on](http://i.imgur.com/b187cNt.png)
-![album off](http://i.imgur.com/s2nsfy4.png)
+Pressing and holding the left-middle button (button 1) while in the main display will show information about the currently playing playlist, album, or artist.
 
-### Toggling Animated Lines ON/OFF
-![lines on](http://i.imgur.com/RcnTdDe.png)
-![lines off](http://i.imgur.com/eElJoBx.png)
+![Playlist Information](https://i.imgur.com/7r2hntK.png)
+
+![Artist Information](https://i.imgur.com/8p9AgLf.png)
+
+![Album Information](https://i.imgur.com/lmsVIOx.png)
+
+## Seek Display
+![Seek display](https://i.imgur.com/oBVqnxA.png)
+
+Pressing and holding the right-middle button (button 2) while in the main display will bring up the Seek Display.
+
+### Controls
+Note that the Seek Display will only function if you have a Spotify Premium membership.
+
+Pressing the left-middle button (button 1) will seek left, and pressing the right button (button 3) will seek right. Press the left button (button 0) to go to that section of the song.
+
+## Up Next Display
+![Up Next Display](https://i.imgur.com/QIOX18F.png)
+
+Pressing and holding the right button (button 3) while in the main display will bring up the Up Next Display.
+
+### Controls
+Note that the Up Next Display will only function if you have a Spotify Premium membership.
+
+Pressing the left button (button 0) will go to the previous song. Pressing the left-middle button will go to the next song. Pressing the right-middle button will pause/play the current track.
+
 
 ### *Changelog:*
 ```
+v2.0.0 [April 12 2020]
+ + Updated SpotifyAPI-NET, total rewrite of the software
+ 
 v1.0.0.16 [April 28 2018]
  + Updated SpotifyAPI-NET to 2.18.1
  + Support for 1.0.77.338.g758ebd78
