@@ -440,6 +440,7 @@ namespace Spoti15
                     Authorize();
                     return;
                 }
+                UpdateAccessToken(token);
             }
             catch(Exception e)
             {
@@ -472,105 +473,114 @@ namespace Spoti15
             if (api == null)
                 return;
 
-            var retrievedPlayback = api.GetPlayback();
-            if(retrievedPlayback != null)
+            try
             {
-                cachedPlayback = retrievedPlayback;
-                if(cachedPlayback.HasError() && cachedPlayback.Error.Message == "The access token expired" && authorized)
-                {
-                    authorized = false;
-                    Authorize();
-                }
-            }
+                initExcpt = null;
 
-            if(cachedPlayback != null && cachedPlayback.Item != null)
-            {
-                var ListedItem = new List<string>(1);
-                ListedItem.Add(cachedPlayback.Item.Id);
-                var response = api.CheckSavedTracks(ListedItem);
-                if(response.List == null)
+                var retrievedPlayback = api.GetPlayback();
+                if (retrievedPlayback != null)
                 {
-                    if (response.HasError() && response.Error.Message == "The access token expired" && authorized)
+                    cachedPlayback = retrievedPlayback;
+                    if (cachedPlayback.HasError() && cachedPlayback.Error.Message == "The access token expired" && authorized)
                     {
                         authorized = false;
                         Authorize();
                     }
                 }
-                else
-                {
-                    cachedLikedTrack = response.List[0];
-                }
 
-                if(cachedPlayback.Context == null)
+                if (cachedPlayback != null && cachedPlayback.Item != null)
                 {
-
-                }
-                else if(cachedPlayback.Context.Type == "playlist")
-                {
-                    var split = cachedPlayback.Context.ExternalUrls["spotify"].Split('/');
-                    var newPlaylist = api.GetPlaylist(split[4]);
-                    if(newPlaylist != null && !newPlaylist.HasError())
+                    var ListedItem = new List<string>(1);
+                    ListedItem.Add(cachedPlayback.Item.Id);
+                    var response = api.CheckSavedTracks(ListedItem);
+                    if (response.List == null)
                     {
-                        cachedPlaylist = newPlaylist;
-                    }
-                }
-                else if(cachedPlayback.Context.Type == "album")
-                {
-                    var newAlbum = api.GetAlbum(cachedPlayback.Item.Album.Id);
-                    if(newAlbum != null && !newAlbum.HasError())
-                    {
-                        cachedAlbum = newAlbum;
-                    }
-
-                    if(upNextAlbumTrack != null)
-                    {
-                        if(cachedPlayback.Item.TrackNumber + 1 > newAlbum.Tracks.Items.Count)
-                        {   // just go back to 0 i guess?
-                            upNextAlbumTrackFull = api.GetTrack(newAlbum.Tracks.Items[0].Id);
-                        }
-                        else
+                        if (response.HasError() && response.Error.Message == "The access token expired" && authorized)
                         {
-                            upNextAlbumTrackFull = api.GetTrack(newAlbum.Tracks.Items[cachedPlayback.Item.TrackNumber + 1].Id);
+                            authorized = false;
+                            Authorize();
                         }
                     }
                     else
                     {
-                        upNextAlbumTrackFull = null;
+                        cachedLikedTrack = response.List[0];
                     }
-                }
-                else if(cachedPlayback.Context.Type == "artist")
-                {
-                    var split = cachedPlayback.Context.ExternalUrls["spotify"].Split('/');
-                    var region = RegionInfo.CurrentRegion;
 
-                    upNextAlbumTrackFull = null;
-
-                    var artistTracks = api.GetArtistsTopTracks(split[4], region.TwoLetterISORegionName);
-                    var thisArtist = api.GetArtist(split[4]);
-
-                    if(thisArtist != null)
+                    if (cachedPlayback.Context == null)
                     {
-                        cachedArtist = thisArtist;
+
                     }
-                    
-                    for(int i = 0; i < artistTracks.Tracks.Count; i++)
+                    else if (cachedPlayback.Context.Type == "playlist")
                     {
-                        if(artistTracks.Tracks[i].Id == cachedPlayback.Item.Id)
+                        var split = cachedPlayback.Context.ExternalUrls["spotify"].Split('/');
+                        var newPlaylist = api.GetPlaylist(split[4]);
+                        if (newPlaylist != null && !newPlaylist.HasError())
                         {
-                            if(i == artistTracks.Tracks.Count - 1)
-                            {
-                                upNextAlbumTrackFull = artistTracks.Tracks[0];
-                                break;
+                            cachedPlaylist = newPlaylist;
+                        }
+                    }
+                    else if (cachedPlayback.Context.Type == "album")
+                    {
+                        var newAlbum = api.GetAlbum(cachedPlayback.Item.Album.Id);
+                        if (newAlbum != null && !newAlbum.HasError())
+                        {
+                            cachedAlbum = newAlbum;
+                        }
+
+                        if (upNextAlbumTrack != null)
+                        {
+                            if (cachedPlayback.Item.TrackNumber + 1 > newAlbum.Tracks.Items.Count)
+                            {   // just go back to 0 i guess?
+                                upNextAlbumTrackFull = api.GetTrack(newAlbum.Tracks.Items[0].Id);
                             }
                             else
                             {
-                                upNextAlbumTrackFull = artistTracks.Tracks[i + 1];
-                                break;
+                                upNextAlbumTrackFull = api.GetTrack(newAlbum.Tracks.Items[cachedPlayback.Item.TrackNumber + 1].Id);
+                            }
+                        }
+                        else
+                        {
+                            upNextAlbumTrackFull = null;
+                        }
+                    }
+                    else if (cachedPlayback.Context.Type == "artist")
+                    {
+                        var split = cachedPlayback.Context.ExternalUrls["spotify"].Split('/');
+                        var region = RegionInfo.CurrentRegion;
+
+                        upNextAlbumTrackFull = null;
+
+                        var artistTracks = api.GetArtistsTopTracks(split[4], region.TwoLetterISORegionName);
+                        var thisArtist = api.GetArtist(split[4]);
+
+                        if (thisArtist != null)
+                        {
+                            cachedArtist = thisArtist;
+                        }
+
+                        for (int i = 0; i < artistTracks.Tracks.Count; i++)
+                        {
+                            if (artistTracks.Tracks[i].Id == cachedPlayback.Item.Id)
+                            {
+                                if (i == artistTracks.Tracks.Count - 1)
+                                {
+                                    upNextAlbumTrackFull = artistTracks.Tracks[0];
+                                    break;
+                                }
+                                else
+                                {
+                                    upNextAlbumTrackFull = artistTracks.Tracks[i + 1];
+                                    break;
+                                }
                             }
                         }
                     }
+
                 }
-                
+            }
+            catch(AggregateException /*e*/)
+            {
+                //initExcpt = e; // This is common if the task was dropped
             }
             
         }
@@ -697,6 +707,12 @@ namespace Spoti15
         private void DrawPlaybackStatus(Graphics g, bool drawTime)
         {
             var playback = cachedPlayback;
+
+            if(playback.HasError())
+            {   // if there's an error, don't bother
+                DrawTextScroll(g, 6, playback.Error.Message);
+                return;
+            }
 
             int len = playback.Item.DurationMs;
             int pos = playback.ProgressMs;
