@@ -7,6 +7,7 @@ using SpotifyAPI.Web;
 using SpotifyAPI.Web.Auth;
 using SpotifyAPI.Web.Enums;
 using SpotifyAPI.Web.Models;
+using System.Globalization;
 
 namespace Spoti15
 {
@@ -49,6 +50,7 @@ namespace Spoti15
         private FullPlaylist cachedPlaylist;
         private FullAlbum cachedAlbum;
         private PlaybackContext cachedPlayback;
+        private FullArtist cachedArtist;
 
         public Spoti15()
         {
@@ -522,14 +524,52 @@ namespace Spoti15
 
                     if(upNextAlbumTrack != null)
                     {
-                        upNextAlbumTrackFull = api.GetTrack(cachedPlayback.Item.Id);
+                        if(cachedPlayback.Item.TrackNumber + 1 > newAlbum.Tracks.Items.Count)
+                        {   // just go back to 0 i guess?
+                            upNextAlbumTrackFull = api.GetTrack(newAlbum.Tracks.Items[0].Id);
+                        }
+                        else
+                        {
+                            upNextAlbumTrackFull = api.GetTrack(newAlbum.Tracks.Items[cachedPlayback.Item.TrackNumber + 1].Id);
+                        }
                     }
                     else
                     {
                         upNextAlbumTrackFull = null;
                     }
                 }
-                
+                else if(cachedPlayback.Context.Type == "artist")
+                {
+                    var split = cachedPlayback.Context.ExternalUrls["spotify"].Split('/');
+                    var region = RegionInfo.CurrentRegion;
+
+                    upNextAlbumTrackFull = null;
+
+                    var artistTracks = api.GetArtistsTopTracks(split[4], region.TwoLetterISORegionName);
+                    var thisArtist = api.GetArtist(split[4]);
+
+                    if(thisArtist != null)
+                    {
+                        cachedArtist = thisArtist;
+                    }
+                    
+                    for(int i = 0; i < artistTracks.Tracks.Count; i++)
+                    {
+                        if(artistTracks.Tracks[i].Id == cachedPlayback.Item.Id)
+                        {
+                            if(i == artistTracks.Tracks.Count - 1)
+                            {
+                                upNextAlbumTrackFull = artistTracks.Tracks[0];
+                                break;
+                            }
+                            else
+                            {
+                                upNextAlbumTrackFull = artistTracks.Tracks[i + 1];
+                                break;
+                            }
+                        }
+                    }
+                }
                 
             }
             
@@ -743,6 +783,17 @@ namespace Spoti15
                     }
                 }
             }
+            else if(playback.Context.Type == "artist")
+            {
+                if(descFlip || cachedArtist == null)
+                {
+                    DrawText(g, 0, "Playing Artist");
+                }
+                else if(cachedArtist != null)
+                {
+                    DrawTextWithinBounds(g, 0, cachedArtist.Name, mainFont, 0, 110);
+                }
+            }
             else
             {
                 DrawText(g, 3, "Unknown");
@@ -890,7 +941,7 @@ namespace Spoti15
                             DrawTextScroll(g, 4, GetStringFromArtists(upNextPlaylistTrack.Track.Artists.ToArray()));
                             DrawTextScroll(g, 5, upNextPlaylistTrack.Track.Album.Name);
 
-                            DrawText(g, 0, string.Format("e {0}", upNextPlaylistTrack.Track.Popularity), iconFont, 5, 5);
+                            DrawText(g, 0, string.Format("e {0}%", upNextPlaylistTrack.Track.Popularity), iconFont, 5, 5);
                         }
                         else if (cachedPlayback.Context.Type == "album" && upNextAlbumTrack != null)
                         {
@@ -899,8 +950,14 @@ namespace Spoti15
 
                             if (upNextAlbumTrackFull != null)
                             {
-                                DrawText(g, 0, string.Format("e {0}", upNextAlbumTrackFull.Popularity), iconFont, 5, 5);
+                                DrawText(g, 0, string.Format("e {0}%", upNextAlbumTrackFull.Popularity), iconFont, 5, 5);
                             }
+                        }
+                        else if(cachedPlayback.Context.Type == "artist" && upNextAlbumTrackFull != null)
+                        {
+                            DrawTextScroll(g, 3, upNextAlbumTrackFull.Name);
+                            DrawTextScroll(g, 4, upNextAlbumTrackFull.Album.Name);
+                            DrawText(g, 0, string.Format("e {0}%", upNextAlbumTrackFull.Popularity), iconFont, 5, 5);
                         }
                         else
                         {
@@ -947,6 +1004,20 @@ namespace Spoti15
 
                             DrawPlaybackStatus(g, true);
                         }
+                        else if(cachedPlayback.Context.Type == "artist" && cachedArtist != null)
+                        {
+                            DrawTextScroll(g, 1, "ARTIST", bigFont);
+                            DrawTextScroll(g, 3, cachedArtist.Name);
+                            DrawTextScroll(g, 4, GetStringFromGenres(cachedArtist.Genres.ToArray()));
+
+                            DrawText(g, 0, string.Format("e {0}", cachedArtist.Followers.Total), iconFont, 5, 5);
+
+                            DrawPlaybackStatus(g, true);
+                        }
+                        else
+                        {
+                            DrawTextScroll(g, 1, cachedPlayback.Context.Type);
+                        }
                     }
                     else
                     {
@@ -983,11 +1054,17 @@ namespace Spoti15
                         
 
                         // Draw number of followers
-                        DrawText(g, 5, string.Format("e {0}", cachedPlayback.Item.Popularity), iconFont);
-
-                        DrawTextScroll(g, 2, GetStringFromArtists(playback.Item.Artists.ToArray()));
-                        DrawTextScroll(g, 1, playback.Item.Name);
-                        DrawTextScroll(g, 3, playback.Item.Album.Name);
+                        if(cachedPlayback != null && cachedPlayback.Item != null)
+                        {
+                            DrawText(g, 5, string.Format("e {0}%", cachedPlayback.Item.Popularity), iconFont);
+                        }
+                        
+                        if(playback != null && playback.Item != null)
+                        {
+                            DrawTextScroll(g, 2, GetStringFromArtists(playback.Item.Artists.ToArray()));
+                            DrawTextScroll(g, 1, playback.Item.Name);
+                            DrawTextScroll(g, 3, playback.Item.Album.Name);
+                        }
 
                         DrawPlaybackStatus(g, true);
                         DrawPlaylistStatus(g);
