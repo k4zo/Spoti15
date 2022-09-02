@@ -17,15 +17,17 @@
 
 2\. Create a new applet in the Spotify Developer Dashboard. Save the Client ID and Secret ID.
 
-3\. Run Spoti15. Use the Client ID and Secret ID in the web browser window that pops up.
+3\. In the Applet page of the Spotify Developer Dashboard, under 'Edit Settings' enter the following URI to the 'Redirect URIs' whitelist: `http://localhost:4002`. Then click 'Add' and finally 'Save'.
 
-4\. (OPTIONAL): Save the Client ID and Secret ID to environment variables (SPOTIFY_CLIENT_ID and SPOTIFY_SECRET_ID) to save them across sessions.
+4\. Run Spoti15. Use the Client ID and Secret ID in the web browser window that pops up.
 
-5\. Ensure that the application is selected in your Logitech Gaming Software
+5\. (OPTIONAL): Save the Client ID and Secret ID to environment variables (SPOTIFY_CLIENT_ID and SPOTIFY_SECRET_ID) to save them across sessions.
 
-6\. Ensure that Spotify is Running in the background.
+6\. Ensure that the application is selected in your Logitech Gaming Software
 
-7\. Done!
+7\. Ensure that Spotify is Running in the background.
+
+8\. Done!
 
 ## Main Display
 ![Main display](https://i.imgur.com/359JN6p.png)
