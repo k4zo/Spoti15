@@ -812,7 +812,7 @@ namespace Spoti15
             }
             else
             {
-                DrawText(g, 3, "Unknown");
+                DrawText(g, 0, "Liked Songs"); // liked shows as unknown, but can't think of any case where it wouldn't be liked
             }
         }
 
@@ -1041,15 +1041,7 @@ namespace Spoti15
                         var playback = cachedPlayback;
                         if (playback == null || playback.Item == null)
                         {
-                            if (playback == null)
-                            {
-                                g.Clear(bgColor);
-                                DrawTextScroll(g, 1, "ERROR");
-                                DrawTextScroll(g, 2, "SPOTIFY PLAYBACK NOT DETECTED");
-                                DoRender();
-                                return;
-                            }
-                            else if (playback.CurrentlyPlayingType == TrackType.Ad)
+                            if (playback.CurrentlyPlayingType == TrackType.Ad)
                             {
                                 g.Clear(bgColor);
                                 DrawTextScroll(g, 2, "Advertisement");
@@ -1062,8 +1054,12 @@ namespace Spoti15
                                 DrawTextScroll(g, 1, "ERROR");
                                 DrawTextScroll(g, 2, playback.Error.Message);
                             }
-                            else
+                            else // for some reason stopping playback after previously playing won't trigger the "playback == null" condition
                             {
+                                g.Clear(bgColor);
+                                DrawTextScroll(g, 1, "ERROR");
+                                DrawTextScroll(g, 2, "NO SPOTIFY PLAYBACK DETECTED");
+                                DoRender();
                                 return;
                             }
                         }
