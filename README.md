@@ -2,6 +2,10 @@
 ### A Spotify Applet for the Logitech G15/G510S
 
 ---
+
+I've updated this to fix a couple issues I noticed with it, everything below is straight from the original readme.md
+
+---
  The original developer has abandoned the project so I've kept this applet updated to work with the latest version of [SpotifyAPI-NET](https://github.com/JohnnyCrazy/SpotifyAPI-NET) and updated it with new features.
  
 ## Features
