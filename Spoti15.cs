@@ -812,7 +812,7 @@ namespace Spoti15
             }
             else
             {
-                DrawText(g, 3, "Unknown");
+                DrawText(g, 0, "Liked Songs"); // unknown, but can't think of any case where it wouldn't be liked music
             }
         }
 
@@ -1041,15 +1041,7 @@ namespace Spoti15
                         var playback = cachedPlayback;
                         if (playback == null || playback.Item == null)
                         {
-                            if (playback == null)
-                            {
-                                g.Clear(bgColor);
-                                DrawTextScroll(g, 1, "ERROR");
-                                DrawTextScroll(g, 2, "SPOTIFY PLAYBACK NOT DETECTED");
-                                DoRender();
-                                return;
-                            }
-                            else if (playback.CurrentlyPlayingType == TrackType.Ad)
+                            if (playback.CurrentlyPlayingType == TrackType.Ad)
                             {
                                 g.Clear(bgColor);
                                 DrawTextScroll(g, 2, "Advertisement");
@@ -1061,9 +1053,15 @@ namespace Spoti15
                                 g.Clear(bgColor);
                                 DrawTextScroll(g, 1, "ERROR");
                                 DrawTextScroll(g, 2, playback.Error.Message);
+                                DoRender();
+                                return;
                             }
-                            else
+                            else // if haven't begun yet, or stopped, which for some reason doesn't meet (playback == null) condition
                             {
+                                g.Clear(bgColor);
+                                DrawTextScroll(g, 2, "No playback detected");
+                                DrawTextScroll(g, 3, "Check Spotify");
+                                DoRender();
                                 return;
                             }
                         }
