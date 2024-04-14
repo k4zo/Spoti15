@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Forms;
 using System.Drawing;
 using System.Threading.Tasks;
@@ -8,6 +8,7 @@ using SpotifyAPI.Web.Auth;
 using SpotifyAPI.Web.Enums;
 using SpotifyAPI.Web.Models;
 using System.Globalization;
+using Unosquare.Swan;
 
 namespace Spoti15
 {
@@ -41,6 +42,7 @@ namespace Spoti15
         private bool cachedLikedTrack = false;
         private bool likedSongNotification = false;
         private bool unlikedSongNotification = false;
+        private bool noSongPlayingNotification = false;
         private bool showingError = false;
         private string errorString = "";
         private FullTrack likedOrUnlikedSong;
@@ -115,25 +117,13 @@ namespace Spoti15
             inControlMenu = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono3);
             if(inControlMenu && !seeking)
             {
-                bool btn2InCtlNow = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono2);
-                if(btn2InCtlNow && !btn2Before)
-                {
-                    var error = api.PausePlayback();
-                    if(error.HasError())
-                    {
-                        showingError = true;
-                        errorString = error.Error.Message;
-                        hideErrorTimer = new Timer();
-                        hideErrorTimer.Enabled = true;
-                        hideErrorTimer.Interval = 3000;
-                        hideErrorTimer.Tick += OnErrorHidden;
-                    }
-                }
-                btn2Before = btn2InCtlNow;
-
                 bool btn1InCtlNow = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono1);
                 if(btn1InCtlNow && !btn1Before)
                 {
+                    if (cachedPlayback == null || cachedPlayback.Item == null)
+                    {
+                        return;
+                    }
                     var error = api.SkipPlaybackToNext();
                     if (error.HasError())
                     {
@@ -150,6 +140,10 @@ namespace Spoti15
                 bool btn0InCtlNow = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono0);
                 if(btn0InCtlNow && !btn0Before)
                 {
+                    if (cachedPlayback == null || cachedPlayback.Item == null)
+                    {
+                        return;
+                    }
                     var error = api.SkipPlaybackToPrevious();
                     if (error.HasError())
                     {
@@ -165,10 +159,18 @@ namespace Spoti15
                 return;
             }
 
-            if (seeking && !btn2Before && cachedPlayback != null && cachedPlayback.CurrentlyPlayingType != TrackType.Ad)
+            if ((seeking) && (!btn2Before) && (cachedPlayback != null) && (cachedPlayback.CurrentlyPlayingType != TrackType.Ad))
             {
+                //skip seek position if nothing playing to prevent crash
+                if (cachedPlayback == null || cachedPlayback.Item == null)
+                {
+                    return;
+                }
                 // set seek position to current
-                currentSeekPosition = (double)cachedPlayback.ProgressMs / cachedPlayback.Item.DurationMs;
+                else
+                {
+                    currentSeekPosition = (double)cachedPlayback.ProgressMs / cachedPlayback.Item.DurationMs;
+                }
             }
 
             btn2Before = seeking;
@@ -222,12 +224,18 @@ namespace Spoti15
                 var thisItem = cachedPlayback;
                 if(thisItem == null || thisItem.Item == null)
                 {
+                    noSongPlayingNotification = true;
+                    disableLikedSongNotificationTimer = new Timer();
+                    disableLikedSongNotificationTimer.Enabled = true;
+                    disableLikedSongNotificationTimer.Interval = 5000;
+                    disableLikedSongNotificationTimer.Tick += OnLikedSongNotificationFinished;
+                    btn0Before = btn0Now;
                     return;
                 }
 
-                if(likedSongNotification || unlikedSongNotification)
+                if(likedSongNotification || unlikedSongNotification || noSongPlayingNotification)
                 {
-                    likedSongNotification = unlikedSongNotification = false;
+                    likedSongNotification = unlikedSongNotification = noSongPlayingNotification = false;
                     btn0Before = btn0Now;
                     disableLikedSongNotificationTimer.Enabled = false;
                     return;
@@ -345,7 +353,7 @@ namespace Spoti15
 
         private void OnLikedSongNotificationFinished(object source, EventArgs e)
         {
-            likedSongNotification = unlikedSongNotification = false;
+            likedSongNotification = unlikedSongNotification = noSongPlayingNotification = false;
             disableLikedSongNotificationTimer.Enabled = false;
         }
         
@@ -812,7 +820,7 @@ namespace Spoti15
             }
             else
             {
-                DrawText(g, 0, "Liked Songs"); // liked shows as unknown, but can't think of any case where it wouldn't be liked
+                DrawText(g, 0, playback.Context.Type); // liked shows as unknown, but can't think of any case where it wouldn't be liked
             }
         }
 
@@ -844,7 +852,7 @@ namespace Spoti15
                     {
                         // TODO: draw spotify logo
                         g.Clear(bgColor);
-                        DrawTextScroll(g, 2, "SPOTIFY");
+                        DrawTextScroll(g, 2, "SPOTI15");
                     }
                     else if(showingError)
                     {
@@ -875,33 +883,50 @@ namespace Spoti15
 
                         DrawPlaybackStatus(g, false);
                     }
-                    else if(seeking && cachedPlayback != null && cachedPlayback.Item != null)
+                    else if (noSongPlayingNotification)
                     {
                         g.Clear(bgColor);
+                        DrawTextScroll(g, 1, "CANNOT LIKE SONG", bigFont);
+                        DrawTextScroll(g, 3, "Error: Spotify not playing");
+                    }
+                    else if(seeking && cachedPlayback != null)
+                    {
+                        if (cachedPlayback.Item == null)
+                        {
+                            g.Clear(bgColor);
 
-                        DrawTextScroll(g, 1, "SEEKING");
+                            DrawTextScroll(g, 1, "SEEKING", bigFont);
 
-                        var posInMs = (int)(cachedPlayback.Item.DurationMs * currentSeekPosition);
-                        DrawTextScroll(g, 3, string.Format("{0:D2}:{1:D2}", posInMs / 60000, (posInMs % 60000) / 1000));
+                            DrawTextScroll(g, 3, "Error: Spotify not playing");
+                        }
+                        else
+                        {
+                            g.Clear(bgColor);
 
-                        // Draw progress bar
-                        g.DrawRectangle(Pens.White, 8, LogiLcd.MonoHeight - 16, (LogiLcd.MonoWidth - 24), 6);
-                        g.FillRectangle(Brushes.White, 8, LogiLcd.MonoHeight - 16, (int)((LogiLcd.MonoWidth - 24) * currentSeekPosition), 6);
+                            DrawTextScroll(g, 1, "SEEKING", bigFont);
 
-                        g.FillPolygon(Brushes.White, new Point[] {
-                            new Point((LogiLcd.MonoWidth - 19), LogiLcd.MonoHeight - 7),
-                            new Point((LogiLcd.MonoWidth - 19), LogiLcd.MonoHeight - 1),
-                            new Point((LogiLcd.MonoWidth - 14), LogiLcd.MonoHeight - 4)
-                        });
+                            var posInMs = (int)(cachedPlayback.Item.DurationMs * currentSeekPosition);
+                            DrawTextScroll(g, 3, string.Format("{0:D2}:{1:D2}", posInMs / 60000, (posInMs % 60000) / 1000));
 
-                        g.FillPolygon(Brushes.White, new Point[] {
-                            new Point(60, LogiLcd.MonoHeight - 7),
-                            new Point(60, LogiLcd.MonoHeight - 1),
-                            new Point(55, LogiLcd.MonoHeight - 4)
-                        });
+                            // Draw progress bar
+                            g.DrawRectangle(Pens.White, 8, LogiLcd.MonoHeight - 16, (LogiLcd.MonoWidth - 24), 6);
+                            g.FillRectangle(Brushes.White, 8, LogiLcd.MonoHeight - 16, (int)((LogiLcd.MonoWidth - 24) * currentSeekPosition), 6);
 
-                        DrawText(g, 6, "OK", iconFont, 8);
-                        DrawPlaylistStatus(g);
+                            g.FillPolygon(Brushes.White, new Point[] {
+                                new Point((LogiLcd.MonoWidth - 19), LogiLcd.MonoHeight - 7),
+                                new Point((LogiLcd.MonoWidth - 19), LogiLcd.MonoHeight - 1),
+                                new Point((LogiLcd.MonoWidth - 14), LogiLcd.MonoHeight - 4)
+                            });
+
+                            g.FillPolygon(Brushes.White, new Point[] {
+                                new Point(60, LogiLcd.MonoHeight - 7),
+                                new Point(60, LogiLcd.MonoHeight - 1),
+                                new Point(55, LogiLcd.MonoHeight - 4)
+                            });
+
+                            DrawText(g, 6, "OK", iconFont, 8);
+                            DrawPlaylistStatus(g);
+                        }
                     }
                     else if(inControlMenu && cachedPlayback != null)
                     {
@@ -931,25 +956,11 @@ namespace Spoti15
                             new Point(18, LogiLcd.MonoHeight - 4)
                         });
 
-                        if (cachedPlayback.IsPlaying)
-                        {
-                            g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 58), LogiLcd.MonoHeight - 6, 2, 5));
-                            g.FillRectangle(Brushes.White, new Rectangle((LogiLcd.MonoWidth - 61), LogiLcd.MonoHeight - 6, 2, 5));
-                        }
-                        else
-                        {
-                            g.FillPolygon(Brushes.White, new Point[] {
-                                new Point((LogiLcd.MonoWidth - 64), LogiLcd.MonoHeight - 7),
-                                new Point((LogiLcd.MonoWidth - 64), LogiLcd.MonoHeight - 1),
-                                new Point((LogiLcd.MonoWidth - 59), LogiLcd.MonoHeight - 4)
-                            });
-                        }
-
                         DrawTextScroll(g, 1, "UP NEXT", bigFont);
 
                         if(cachedPlayback.Context == null)
                         {
-
+                            DrawTextScroll(g, 3, "Error: Spotify not playing");
                         }
                         else if (cachedPlayback.Context.Type == "playlist" && upNextPlaylistTrack != null)
                         {
@@ -986,7 +997,8 @@ namespace Spoti15
 
                         if(cachedPlayback.Context == null)
                         {
-
+                            DrawTextScroll(g, 1, "STOPPED", bigFont);
+                            DrawTextScroll(g, 3, "Error: Spotify not playing");
                         }
                         else if(cachedPlayback.Context.Type == "playlist")
                         {
@@ -1025,14 +1037,22 @@ namespace Spoti15
                             DrawTextScroll(g, 1, "ARTIST", bigFont);
                             DrawTextScroll(g, 3, cachedArtist.Name);
                             DrawTextScroll(g, 4, GetStringFromGenres(cachedArtist.Genres.ToArray()));
+                            Console.WriteLine(cachedPlayback.ToJson().ToString());
 
                             DrawText(g, 0, string.Format("e {0}", cachedArtist.Followers.Total), iconFont, 5, 5);
 
                             DrawPlaybackStatus(g, true);
                         }
+                        else if(cachedPlayback.Context.Type == "collection")
+                        {
+                            DrawTextScroll(g, 1, "LIKED SONGS", bigFont); //tested, can't find anything that isn't liked music that shows as a "collection"
+                            DrawTextScroll(g, 3, "Details unavailable");
+
+                            DrawPlaybackStatus(g, true);
+                        }
                         else
                         {
-                            DrawTextScroll(g, 1, cachedPlayback.Context.Type);
+                            DrawTextScroll(g, 1, cachedPlayback.Context.Type, bigFont);
                         }
                     }
                     else
@@ -1041,7 +1061,18 @@ namespace Spoti15
                         var playback = cachedPlayback;
                         if (playback == null || playback.Item == null)
                         {
-                            if (playback.CurrentlyPlayingType == TrackType.Ad)
+                            string currentTime1 = DateTime.Now.ToString("h:mm:ss tt");
+                            Size textSize1 = TextRenderer.MeasureText(currentTime1, mainFont);
+                            DrawText(g, 0, currentTime1, LogiLcd.MonoWidth - textSize1.Width);
+                            if (playback == null)
+                            {
+                                g.Clear(bgColor);
+                                DrawTextScroll(g, 1, "STARTING", bigFont);
+                                DrawTextScroll(g, 3, "Wait for API to initialize");
+                                DoRender();
+                                return;
+                            }
+                            else if (playback.CurrentlyPlayingType == TrackType.Ad)
                             {
                                 g.Clear(bgColor);
                                 DrawTextScroll(g, 2, "Advertisement");
@@ -1053,12 +1084,13 @@ namespace Spoti15
                                 g.Clear(bgColor);
                                 DrawTextScroll(g, 1, "ERROR");
                                 DrawTextScroll(g, 2, playback.Error.Message);
+                                DoRender();
+                                return;
                             }
-                            else // for some reason stopping playback after previously playing won't trigger the "playback == null" condition
+                            else
                             {
-                                g.Clear(bgColor);
-                                DrawTextScroll(g, 1, "ERROR");
-                                DrawTextScroll(g, 2, "NO SPOTIFY PLAYBACK DETECTED");
+                                DrawTextScroll(g, 1, "ERROR", bigFont);
+                                DrawTextScroll(g, 3, "No Spotify playback detected");
                                 DoRender();
                                 return;
                             }
