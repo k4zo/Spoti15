@@ -9,6 +9,10 @@ using SpotifyAPI.Web.Enums;
 using SpotifyAPI.Web.Models;
 using System.Globalization;
 using Unosquare.Swan;
+using static System.Net.Mime.MediaTypeNames;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Text;
 
 namespace Spoti15
 {
@@ -140,11 +144,20 @@ namespace Spoti15
                 bool btn0InCtlNow = lcd.IsButtonPressed(LogiLcd.LcdButton.Mono0);
                 if(btn0InCtlNow && !btn0Before)
                 {
+                    var error = new ErrorResponse();
                     if (cachedPlayback == null || cachedPlayback.Item == null)
                     {
                         return;
                     }
-                    var error = api.SkipPlaybackToPrevious();
+                    if ((double)cachedPlayback.ProgressMs >= 3000)
+                    {
+                        error = api.SeekPlayback(0);
+                    }
+                    else
+                    {
+                        error = api.SkipPlaybackToPrevious();
+                    }
+
                     if (error.HasError())
                     {
                         showingError = true;
@@ -245,7 +258,8 @@ namespace Spoti15
 
                 likedOrUnlikedSong = thisItem.Item;
                 ListedItem.Add(likedOrUnlikedSong.Id);
-                if(cachedLikedTrack)
+                bool isAlreadyLiked = api.CheckSavedTracks(ListedItem).ToBoolean(); //in my testing, for whatever reason, this will always return false and result in the program attempting to like an already liked song
+                if (isAlreadyLiked)
                 {
                     api.RemoveSavedTracks(ListedItem);
                     likedSongNotification = false;
@@ -566,7 +580,7 @@ namespace Spoti15
                             cachedArtist = thisArtist;
                         }
 
-                        for (int i = 0; i < artistTracks.Tracks.Count; i++)
+                        for (int i = 0; i < artistTracks.Tracks.Count; i++) //this line causes a crash if listening from artist page
                         {
                             if (artistTracks.Tracks[i].Id == cachedPlayback.Item.Id)
                             {
@@ -820,7 +834,7 @@ namespace Spoti15
             }
             else
             {
-                DrawText(g, 0, playback.Context.Type); // liked shows as unknown, but can't think of any case where it wouldn't be liked
+                DrawText(g, 0, "Liked Songs"); // refer to line 1043
             }
         }
 
@@ -850,9 +864,17 @@ namespace Spoti15
                 {
                     if(api == null)
                     {
-                        // TODO: draw spotify logo
+                        // TODO: draw spotify logo (done)
+                        var spotlogo = new byte[] { 66, 77, 150, 1, 0, 0, 0, 0, 0, 0, 62, 0, 0, 0, 40, 0, 0, 0, 43, 0, 0, 0, 43, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 196, 14, 0, 0, 196, 14, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 63, 128, 0, 0, 0, 0, 0, 3, 255, 248, 0, 0, 0, 0, 0, 15, 255, 254, 0, 0, 0, 0, 0, 31, 255, 255, 0, 0, 0, 0, 0, 127, 255, 255, 192, 0, 0, 0, 0, 255, 255, 255, 224, 0, 0, 0, 1, 255, 255, 255, 240, 0, 0, 0, 3, 255, 255, 255, 248, 0, 0, 0, 7, 255, 255, 255, 252, 0, 0, 0, 7, 255, 255, 255, 252, 0, 0, 0, 15, 255, 255, 255, 254, 0, 0, 0, 31, 255, 255, 241, 255, 0, 0, 0, 31, 255, 255, 193, 255, 0, 0, 0, 31, 195, 254, 3, 255, 0, 0, 0, 63, 192, 0, 15, 255, 128, 0, 0, 63, 224, 0, 127, 255, 128, 0, 0, 63, 255, 255, 254, 127, 128, 0, 0, 63, 255, 255, 248, 127, 128, 0, 0, 63, 255, 255, 192, 127, 192, 0, 0, 127, 129, 248, 0, 255, 192, 0, 0, 127, 128, 0, 3, 255, 192, 0, 0, 127, 192, 0, 31, 255, 192, 0, 0, 63, 252, 3, 255, 223, 128, 0, 0, 63, 255, 255, 255, 15, 128, 0, 0, 63, 255, 255, 248, 15, 128, 0, 0, 63, 7, 255, 128, 31, 128, 0, 0, 63, 0, 0, 0, 63, 128, 0, 0, 31, 0, 0, 0, 255, 0, 0, 0, 31, 128, 0, 15, 255, 0, 0, 0, 31, 252, 0, 255, 255, 0, 0, 0, 15, 255, 255, 255, 254, 0, 0, 0, 7, 255, 255, 255, 252, 0, 0, 0, 7, 255, 255, 255, 252, 0, 0, 0, 3, 255, 255, 255, 248, 0, 0, 0, 1, 255, 255, 255, 240, 0, 0, 0, 0, 255, 255, 255, 224, 0, 0, 0, 0, 127, 255, 255, 192, 0, 0, 0, 0, 31, 255, 255, 0, 0, 0, 0, 0, 7, 255, 254, 0, 0, 0, 0, 0, 1, 255, 240, 0, 0, 0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, };
+                        Bitmap bmp;
+                        using (var ms = new MemoryStream(spotlogo))
+                        {
+                            bmp = new Bitmap(ms);
+                        }
+                        int x = (LogiLcd.MonoWidth / 2) - 43 / 2;
                         g.Clear(bgColor);
-                        DrawTextScroll(g, 2, "SPOTI15");
+                        g.DrawImage(bmp, x, 0);
+                        //DrawTextScroll(g, 2, "SPOTI15", bigFont);
                     }
                     else if(showingError)
                     {
@@ -887,24 +909,19 @@ namespace Spoti15
                     {
                         g.Clear(bgColor);
                         DrawTextScroll(g, 1, "CANNOT LIKE SONG", bigFont);
-                        DrawTextScroll(g, 3, "Error: Spotify not playing");
+                        DrawTextScroll(g, 3, "Spotify not playing");
                     }
                     else if(seeking && cachedPlayback != null)
                     {
+                        g.Clear(bgColor);
+                        DrawTextScroll(g, 1, "SEEKING", bigFont);
+
                         if (cachedPlayback.Item == null)
                         {
-                            g.Clear(bgColor);
-
-                            DrawTextScroll(g, 1, "SEEKING", bigFont);
-
-                            DrawTextScroll(g, 3, "Error: Spotify not playing");
+                            DrawTextScroll(g, 3, "Spotify not playing");
                         }
                         else
                         {
-                            g.Clear(bgColor);
-
-                            DrawTextScroll(g, 1, "SEEKING", bigFont);
-
                             var posInMs = (int)(cachedPlayback.Item.DurationMs * currentSeekPosition);
                             DrawTextScroll(g, 3, string.Format("{0:D2}:{1:D2}", posInMs / 60000, (posInMs % 60000) / 1000));
 
@@ -960,7 +977,14 @@ namespace Spoti15
 
                         if(cachedPlayback.Context == null)
                         {
-                            DrawTextScroll(g, 3, "Error: Spotify not playing");
+                            if (cachedPlayback.Item == null)
+                            {
+                                DrawTextScroll(g, 3, "Spotify not playing");
+                            }
+                            else
+                            {
+                                DrawTextScroll(g, 3, "Unknown");
+                            }
                         }
                         else if (cachedPlayback.Context.Type == "playlist" && upNextPlaylistTrack != null)
                         {
@@ -997,8 +1021,31 @@ namespace Spoti15
 
                         if(cachedPlayback.Context == null)
                         {
-                            DrawTextScroll(g, 1, "STOPPED", bigFont);
-                            DrawTextScroll(g, 3, "Error: Spotify not playing");
+                            if (cachedPlayback.Item == null)
+                            {
+                                DrawTextScroll(g, 1, "STOPPED", bigFont);
+                                DrawTextScroll(g, 3, "Spotify not playing");
+                            }
+                            else
+                            {
+                                DrawTextScroll(g, 1, "SINGLE", bigFont);
+                                DrawTextScroll(g, 3, cachedPlayback.Item.Album.Name);
+                                DrawTextScroll(g, 4, GetStringFromArtists(cachedPlayback.Item.Artists.ToArray()));
+                                DrawTextScroll(g, 5, string.Format("Released {0}", cachedPlayback.Item.Album.ReleaseDate));
+
+                                if (cachedAlbum != null)
+                                {
+                                    string genres = GetStringFromGenres(cachedAlbum.Genres.ToArray());
+                                    if (genres == "")
+                                    {
+                                        DrawText(g, 0, string.Format("e {0}", cachedAlbum.Popularity), iconFont, 5, 5);
+                                    }
+                                    else
+                                    {
+                                        DrawTextScroll(g, 6, string.Format("{0} - {1} followers", GetStringFromGenres(cachedAlbum.Genres.ToArray()), cachedAlbum.Popularity));
+                                    }
+                                }
+                            }
                         }
                         else if(cachedPlayback.Context.Type == "playlist")
                         {
@@ -1037,7 +1084,6 @@ namespace Spoti15
                             DrawTextScroll(g, 1, "ARTIST", bigFont);
                             DrawTextScroll(g, 3, cachedArtist.Name);
                             DrawTextScroll(g, 4, GetStringFromGenres(cachedArtist.Genres.ToArray()));
-                            Console.WriteLine(cachedPlayback.ToJson().ToString());
 
                             DrawText(g, 0, string.Format("e {0}", cachedArtist.Followers.Total), iconFont, 5, 5);
 
@@ -1045,8 +1091,7 @@ namespace Spoti15
                         }
                         else if(cachedPlayback.Context.Type == "collection")
                         {
-                            DrawTextScroll(g, 1, "LIKED SONGS", bigFont); //tested, can't find anything that isn't liked music that shows as a "collection"
-                            DrawTextScroll(g, 3, "Details unavailable");
+                            DrawTextScroll(g, 1, "LIKED SONGS", bigFont); //tested, can't find anything that shows as a "collection" other than liked songs
 
                             DrawPlaybackStatus(g, true);
                         }
@@ -1082,15 +1127,15 @@ namespace Spoti15
                             else if (playback.HasError())
                             {
                                 g.Clear(bgColor);
-                                DrawTextScroll(g, 1, "ERROR");
+                                DrawTextScroll(g, 1, "API ERROR");
                                 DrawTextScroll(g, 2, playback.Error.Message);
                                 DoRender();
                                 return;
                             }
                             else
                             {
-                                DrawTextScroll(g, 1, "ERROR", bigFont);
-                                DrawTextScroll(g, 3, "No Spotify playback detected");
+                                DrawTextScroll(g, 1, "NO TRACK INFORMATION", bigFont);
+                                DrawTextScroll(g, 3, "Spotify not playing");
                                 DoRender();
                                 return;
                             }
