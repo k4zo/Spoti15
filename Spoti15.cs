@@ -258,8 +258,7 @@ namespace Spoti15
 
                 likedOrUnlikedSong = thisItem.Item;
                 ListedItem.Add(likedOrUnlikedSong.Id);
-                bool isAlreadyLiked = api.CheckSavedTracks(ListedItem).ToBoolean(); //in my testing, for whatever reason, this will always return false and result in the program attempting to like an already liked song
-                if (isAlreadyLiked)
+                if (cachedLikedSong)
                 {
                     api.RemoveSavedTracks(ListedItem);
                     likedSongNotification = false;
