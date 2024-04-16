@@ -8,11 +8,7 @@ using SpotifyAPI.Web.Auth;
 using SpotifyAPI.Web.Enums;
 using SpotifyAPI.Web.Models;
 using System.Globalization;
-using Unosquare.Swan;
-using static System.Net.Mime.MediaTypeNames;
-using System.Drawing.Imaging;
 using System.IO;
-using System.Text;
 
 namespace Spoti15
 {
