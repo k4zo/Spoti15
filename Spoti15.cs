@@ -258,7 +258,7 @@ namespace Spoti15
 
                 likedOrUnlikedSong = thisItem.Item;
                 ListedItem.Add(likedOrUnlikedSong.Id);
-                if (cachedLikedSong)
+                if (cachedLikedTrack)
                 {
                     api.RemoveSavedTracks(ListedItem);
                     likedSongNotification = false;
