@@ -575,7 +575,7 @@ namespace Spoti15
                             cachedArtist = thisArtist;
                         }
 
-                        for (int i = 0; i < artistTracks.Tracks.Count; i++) //this line causes a crash if listening from artist page
+                        for (int i = 0; i < artistTracks.Tracks.Count; i++)
                         {
                             if (artistTracks.Tracks[i].Id == cachedPlayback.Item.Id)
                             {
